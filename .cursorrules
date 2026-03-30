@@ -1,0 +1,129 @@
+# DockManage Cursor Rules
+
+## General Rules
+
+- Always write clean, readable, and modular code
+- Prefer simplicity over abstraction
+- Avoid unnecessary complexity
+- Keep functions small (ideally under 50 lines)
+- Use meaningful variable and function names
+
+---
+
+## Backend Rules (Node.js / Express)
+
+- Use Express for all APIs
+- Use async/await (no callbacks or .then chains)
+- Handle errors properly with try/catch
+- Return consistent JSON responses
+
+- All routes must be prefixed with /api
+- Do not expose Docker socket directly to clients
+
+- Use dockerode for all Docker interactions
+- Do NOT use shell commands like exec("docker ...")
+
+Example response format:
+{
+  "success": true,
+  "data": ...
+}
+
+Error format:
+{
+  "success": false,
+  "error": "message"
+}
+
+---
+
+## Frontend Rules (React)
+
+- Use functional components only
+- Use React hooks (useState, useEffect)
+- Keep components small and reusable
+- Avoid deeply nested components
+
+- Use axios for API calls
+- Use relative API paths (/api/...)
+
+---
+
+## UI Rules
+
+- Use Tailwind CSS for styling
+- Use shadcn/ui components wherever possible
+- Maintain consistent spacing (p-4, gap-4, etc.)
+
+- Default to dark mode
+- Use clear visual hierarchy
+
+Status colors:
+- running → green
+- stopped → red
+- restarting → yellow
+
+---
+
+## Logs Viewer Rules
+
+- Display logs in a scrollable container
+- Use monospace font
+- Use dark background
+- Auto-scroll on new logs
+
+---
+
+## Code Style
+
+- Prefer early returns over nested conditions
+- Avoid long files (>300 lines)
+- Split logic into separate modules when needed
+
+---
+
+## Architecture Rules
+
+- Single service architecture
+- Backend serves frontend static files
+- API routes under /api
+- No microservices
+
+---
+
+## When Generating Code
+
+- Only modify what is requested
+- Do not rewrite entire files unless explicitly asked
+- Keep existing structure intact
+
+---
+
+## When Unsure
+
+- Ask for clarification instead of guessing
+- Or provide 2 possible approaches and explain tradeoffs
+
+---
+
+## Performance
+
+- Avoid unnecessary re-renders in React
+- Avoid blocking operations in backend
+
+---
+
+## Security
+
+- Always validate inputs
+- Add basic authentication to protected routes
+- Never expose sensitive system paths
+
+---
+
+## Priority
+
+1. Working code
+2. Readable code
+3. Clean structure
+4. Optimization (only if needed)

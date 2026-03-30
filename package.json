@@ -1,0 +1,15 @@
+{
+  "name": "dockmanage",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @dockmanage/api",
+    "dev:api": "npm run dev -w @dockmanage/api",
+    "dev:web": "npm run dev -w @dockmanage/web",
+    "build": "npm run build -w @dockmanage/types && npm run build -w @dockmanage/web && npm run build -w @dockmanage/api"
+  }
+}

@@ -9,6 +9,16 @@ export interface ContainerSummary {
   status: ContainerStatus;
 }
 
+export interface ConfigFileSummary {
+  path: string;
+  name: string;
+}
+
+export interface ConfigFileContent {
+  path: string;
+  content: string;
+}
+
 export interface ApiSuccessResponse<T> {
   success: true;
   data: T;

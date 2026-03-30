@@ -7,6 +7,7 @@ It allows users to:
 - View all Docker containers
 - Start / Stop / Restart containers
 - View container logs (including live streaming)
+- Edit YAML config files (`.yml` / `.yaml`) from UI
 
 This project is designed to be simple, fast, and easy to extend.
 
@@ -82,6 +83,16 @@ GET    /api/containers/:id/logs
 IMPORTANT:
 This gives root-level access to Docker.
 All endpoints must be protected with authentication.
+
+---
+
+## YAML Config Editor
+
+- Backend exposes `/api/config-files/*` endpoints for listing, reading, and saving YAML files
+- Files are restricted to a config root directory:
+  - default: `dockmanage/docker`
+  - override with `DOCKMANAGE_CONFIG_DIR`
+- Only `.yml` and `.yaml` files are allowed
 
 ---
 

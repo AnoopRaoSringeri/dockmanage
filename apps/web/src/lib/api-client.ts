@@ -1,4 +1,4 @@
-import { ApiResponse, ContainerSummary } from "@dockmanage/types";
+import { ApiResponse, ConfigFileContent, ConfigFileSummary, ContainerSummary } from "@dockmanage/types";
 import axios from "axios";
 
 const client = axios.create({
@@ -22,4 +22,34 @@ export const runContainerAction = async (
   if (!data.success) {
     throw new Error(data.error);
   }
+};
+
+export const fetchConfigFiles = async (): Promise<ConfigFileSummary[]> => {
+  const { data } = await client.get<ApiResponse<ConfigFileSummary[]>>("/config-files");
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  return data.data;
+};
+
+export const fetchConfigFileContent = async (configPath: string): Promise<ConfigFileContent> => {
+  const { data } = await client.get<ApiResponse<ConfigFileContent>>("/config-files/content", {
+    params: { path: configPath },
+  });
+
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  return data.data;
+};
+
+export const saveConfigFileContent = async (payload: ConfigFileContent): Promise<ConfigFileContent> => {
+  const { data } = await client.post<ApiResponse<ConfigFileContent>>("/config-files/content", payload);
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  return data.data;
 };

@@ -15,3 +15,26 @@ export const runContainerAction = async (id, action) => {
         throw new Error(data.error);
     }
 };
+export const fetchConfigFiles = async () => {
+    const { data } = await client.get("/config-files");
+    if (!data.success) {
+        throw new Error(data.error);
+    }
+    return data.data;
+};
+export const fetchConfigFileContent = async (configPath) => {
+    const { data } = await client.get("/config-files/content", {
+        params: { path: configPath },
+    });
+    if (!data.success) {
+        throw new Error(data.error);
+    }
+    return data.data;
+};
+export const saveConfigFileContent = async (payload) => {
+    const { data } = await client.post("/config-files/content", payload);
+    if (!data.success) {
+        throw new Error(data.error);
+    }
+    return data.data;
+};

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { ConfigEditor } from "./components/config-editor";
 import { ContainersTable } from "./components/containers-table";
 import { fetchContainers, runContainerAction } from "./lib/api-client";
 
@@ -73,6 +74,8 @@ export const App = () => {
           onAction={(id, action) => actionMutation.mutate({ id, action })}
         />
       ) : null}
+
+      <ConfigEditor />
     </main>
   );
 };

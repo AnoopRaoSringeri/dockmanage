@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
+import { configFilesRouter } from "./routes/config-files-routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { containersRouter } from "./routes/containers-routes.js";
 import { sendSuccess } from "./utils/api-response.js";
@@ -15,4 +16,5 @@ app.use(morgan("dev"));
 
 app.get("/api/health", (_req, res) => sendSuccess(res, { status: "ok" }));
 app.use("/api/containers", containersRouter);
+app.use("/api/config-files", configFilesRouter);
 app.use(errorHandler);

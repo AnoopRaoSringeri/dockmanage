@@ -12,7 +12,8 @@ const getDefaultSocketPath = (): string => {
   const platform = os.platform();
 
   if (platform === "win32") {
-    return "//./pipe/docker_engine";
+    // Native Windows named pipe path used by Docker Desktop.
+    return "\\\\.\\pipe\\docker_engine";
   }
 
   // Linux and macOS both use the Docker unix socket by default.
@@ -25,7 +26,16 @@ const fromDockerHostEnv = (dockerHost: string): DockerConnectionConfig => {
   }
 
   if (dockerHost.startsWith("npipe://")) {
-    return { socketPath: dockerHost.replace("npipe://", "") };
+    const raw = dockerHost.replace("npipe://", "");
+    const normalized = raw.startsWith("//./pipe/")
+      ? `npipe:////${raw.replace(/^\/+/, "")}`
+      : `npipe:////./pipe/${raw.replace(/^\/+/, "")}`;
+
+    return { socketPath: normalized };
+  }
+
+  if (dockerHost.startsWith("npipe:////")) {
+    return { socketPath: dockerHost };
   }
 
   const normalizedHost = dockerHost.startsWith("tcp://")

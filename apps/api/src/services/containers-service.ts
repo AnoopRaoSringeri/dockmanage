@@ -61,7 +61,7 @@ export const restartService = async (filePath: string): Promise<void> => {
   // Convert the provided path into an absolute directory path
   const absolutePath = path.isAbsolute(filePath) 
     ? filePath 
-    : path.resolve(__dirname, filePath);
+    : path.resolve(import.meta.dirname, filePath);
 
   // If filePath points to a file, get its directory
   const directory = path.dirname(absolutePath);

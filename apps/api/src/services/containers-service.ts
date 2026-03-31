@@ -78,6 +78,7 @@ export const restartService = async (filePath: string): Promise<void> => {
     
     // Equivalent to 'down' then 'up'
     await compose.down(config);
+    await compose.pullAll(config);
     await compose.buildAll(config);
     await compose.upAll(config);
     

@@ -1,6 +1,8 @@
 import { ContainerStatus, ContainerSummary } from "@dockmanage/types";
 import Docker from "dockerode";
+import compose from "docker-compose";
 import { docker } from "./docker-client.js";
+import path from "path";
 
 const mapStateToStatus = (state: string): ContainerStatus => {
   if (state === "running") {
@@ -52,4 +54,35 @@ export const stopContainer = async (id: string): Promise<void> => {
 
 export const restartContainer = async (id: string): Promise<void> => {
   await docker.getContainer(id).restart();
+};
+
+
+export const restartService = async (filePath: string): Promise<void> => {
+  // Convert the provided path into an absolute directory path
+  const absolutePath = path.isAbsolute(filePath) 
+    ? filePath 
+    : path.resolve(__dirname, filePath);
+
+  // If filePath points to a file, get its directory
+  const directory = path.dirname(absolutePath);
+  const fileName = path.basename(absolutePath);
+
+  const config = { 
+    cwd: directory, 
+    config: fileName, // Ensures it uses the specific file provided
+    log: true 
+  };
+
+  try {
+    console.log(`Restarting services using: ${absolutePath}`);
+    
+    // Equivalent to 'down' then 'up'
+    await compose.down(config);
+    await compose.upAll(config);
+    
+    console.log('Restart complete.');
+  } catch (err: any) {
+    console.error('Failed to restart service:', err.message);
+    throw err; // Re-throw so the caller knows it failed
+  }
 };

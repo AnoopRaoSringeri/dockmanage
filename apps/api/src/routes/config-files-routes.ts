@@ -2,6 +2,7 @@ import { Router } from "express";
 import { readConfigQuerySchema, saveConfigBodySchema } from "../schemas/config-files-schemas.js";
 import { listConfigFiles, readConfigFile, saveConfigFile } from "../services/config-files-service.js";
 import { sendError, sendSuccess } from "../utils/api-response.js";
+import { restartService } from "../services/containers-service.js";
 
 export const configFilesRouter = Router();
 
@@ -36,6 +37,7 @@ configFilesRouter.post("/content", async (req, res, next) => {
     }
 
     const saved = await saveConfigFile(parsed.data.path, parsed.data.content);
+    await restartService(parsed.data.path)
     return sendSuccess(res, saved);
   } catch (error) {
     return next(error);

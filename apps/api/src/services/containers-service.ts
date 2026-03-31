@@ -3,6 +3,7 @@ import Docker from "dockerode";
 import compose from "docker-compose";
 import { docker } from "./docker-client.js";
 import path from "path";
+import { toAbsolutePath } from "./config-files-service.js";
 
 const mapStateToStatus = (state: string): ContainerStatus => {
   if (state === "running") {
@@ -59,10 +60,8 @@ export const restartContainer = async (id: string): Promise<void> => {
 
 export const restartService = async (filePath: string): Promise<void> => {
   // Convert the provided path into an absolute directory path
-  const absolutePath = path.isAbsolute(filePath) 
-    ? filePath 
-    : path.resolve(import.meta.dirname, filePath);
-
+  const absolutePath = toAbsolutePath(filePath)
+  console.log(`Running compose command in ${absolutePath}`);
   // If filePath points to a file, get its directory
   const directory = path.dirname(absolutePath);
   const fileName = path.basename(absolutePath);

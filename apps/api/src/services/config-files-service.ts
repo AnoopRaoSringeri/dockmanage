@@ -44,6 +44,9 @@ const collectYamlFiles = async (directory: string): Promise<string[]> => {
   return results;
 };
 
+export const toAbsolutePath = (relativePath: string): string =>
+  path.join(configDir, relativePath);
+
 export const listConfigFiles = async (): Promise<ConfigFileSummary[]> => {
   await ensureConfigDirectory();
   const files = await collectYamlFiles(configDir);

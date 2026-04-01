@@ -75,8 +75,10 @@ export const restartService = async (filePath: string): Promise<void> => {
   try {
     console.log(`Restarting services using: ${absolutePath}`);
     
-    // Equivalent to 'down' then 'up'
-    await compose.down(config);
+    const result = await compose.configServices({ cwd: path.join(__dirname) })
+    console.log("Found following services")
+    console.log(result.data.services)
+    await compose.downMany(result.data.services.filter((s) => s.toLowerCase() != "dockmanage"),config);
     await compose.pullAll(config);
     await compose.buildAll(config);
     await compose.upAll(config);

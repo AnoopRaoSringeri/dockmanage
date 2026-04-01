@@ -24,6 +24,15 @@ export const runContainerAction = async (
   }
 };
 
+export const fetchContainerLogs = async (id: string): Promise<string> => {
+  const { data } = await client.get<ApiResponse<string>>(`/containers/${id}/logs`);
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  return data.data;
+};
+
 export const fetchConfigFiles = async (): Promise<ConfigFileSummary[]> => {
   const { data } = await client.get<ApiResponse<ConfigFileSummary[]>>("/config-files");
   if (!data.success) {

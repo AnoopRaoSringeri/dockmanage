@@ -5,9 +5,10 @@ interface ContainersTableProps {
   containers: ContainerSummary[];
   busyId: string | null;
   onAction: (id: string, action: "start" | "stop" | "restart") => void;
+  onViewLogs: (id: string) => void;
 }
 
-export const ContainersTable = ({ containers, busyId, onAction }: ContainersTableProps) => {
+export const ContainersTable = ({ containers, busyId, onAction, onViewLogs }: ContainersTableProps) => {
   if (!containers.length) {
     return (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-sm text-zinc-300">
@@ -65,6 +66,14 @@ export const ContainersTable = ({ containers, busyId, onAction }: ContainersTabl
                       className="rounded-md border border-zinc-700 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Restart
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => onViewLogs(container.id)}
+                      className="rounded-md border border-zinc-700 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      View logs
                     </button>
                   </div>
                 </td>

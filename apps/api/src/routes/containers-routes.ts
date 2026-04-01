@@ -5,6 +5,7 @@ import {
   restartContainer,
   startContainer,
   stopContainer,
+  fetchContainerLogs,
 } from "../services/containers-service.js";
 import { sendError, sendSuccess } from "../utils/api-response.js";
 
@@ -60,6 +61,20 @@ containersRouter.post("/:id/restart", async (req, res, next) => {
 
     await restartContainer(parsed.data.id);
     return sendSuccess(res, { message: "Container restarted" });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+containersRouter.get("/:id/logs", async (req, res, next) => {
+  try {
+    const parsed = paramsSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return sendError(res, parsed.error.issues[0]?.message ?? "Invalid id", 400);
+    }
+
+    const logs = await fetchContainerLogs(parsed.data.id);
+    return sendSuccess(res, logs);
   } catch (error) {
     return next(error);
   }

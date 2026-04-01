@@ -15,6 +15,13 @@ export const runContainerAction = async (id, action) => {
         throw new Error(data.error);
     }
 };
+export const fetchContainerLogs = async (id) => {
+    const { data } = await client.get(`/containers/${id}/logs`);
+    if (!data.success) {
+        throw new Error(data.error);
+    }
+    return data.data;
+};
 export const fetchConfigFiles = async () => {
     const { data } = await client.get("/config-files");
     if (!data.success) {

@@ -3,6 +3,7 @@ import Docker from "dockerode";
 import compose from "docker-compose";
 import { docker } from "./docker-client.js";
 import path from "path";
+import stream from "node:stream";
 import { toAbsolutePath } from "./config-files-service.js";
 
 const mapStateToStatus = (state: string): ContainerStatus => {
@@ -57,6 +58,45 @@ export const restartContainer = async (id: string): Promise<void> => {
   await docker.getContainer(id).restart();
 };
 
+export const fetchContainerLogs = async (id: string): Promise<string> => {
+  const container = docker.getContainer(id);
+  const logStreamOrBuffer = await new Promise<NodeJS.ReadableStream | Buffer>((resolve, reject) => {
+    container.logs({ stdout: true, stderr: true, follow: false, tail: 200 }, (err, stream) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      resolve(stream as NodeJS.ReadableStream | Buffer);
+    });
+  });
+
+  if (Buffer.isBuffer(logStreamOrBuffer)) {
+    return logStreamOrBuffer.toString("utf8");
+  }
+
+  const stdoutStream = new stream.PassThrough();
+  const stderrStream = new stream.PassThrough();
+  docker.modem.demuxStream(logStreamOrBuffer, stdoutStream, stderrStream);
+
+  const chunks: Buffer[] = [];
+  const errChunks: Buffer[] = [];
+
+  stdoutStream.on("data", (chunk) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  });
+  stderrStream.on("data", (chunk) => {
+    errChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    logStreamOrBuffer.on("end", resolve);
+    logStreamOrBuffer.on("close", resolve);
+    logStreamOrBuffer.on("error", reject);
+  });
+
+  return Buffer.concat([...chunks, ...errChunks]).toString("utf8");
+};
 
 export const restartService = async (filePath: string): Promise<void> => {
   // Convert the provided path into an absolute directory path
@@ -75,7 +115,7 @@ export const restartService = async (filePath: string): Promise<void> => {
   try {
     console.log(`Restarting services using: ${absolutePath}`);
     
-    const result = await compose.configServices({ cwd: path.join(__dirname) })
+    const result = await compose.configServices(config)
     console.log("Found following services")
     console.log(result.data.services)
     await compose.downMany(result.data.services.filter((s) => s.toLowerCase() != "dockmanage"),config);

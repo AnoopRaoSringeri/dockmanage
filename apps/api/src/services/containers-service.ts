@@ -1,6 +1,7 @@
 import { ContainerStatus, ContainerSummary } from "@dockmanage/types";
 import Docker, { type PruneImagesInfo } from "dockerode";
-import compose from "docker-compose";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { docker } from "./docker-client.js";
 import path from "path";
 import stream from "node:stream";
@@ -24,9 +25,9 @@ const getContainerLogsSource = async (
     : { stdout: true, stderr: true, follow: false, tail };
 
   return new Promise<stream.Readable | Buffer>((resolve, reject) => {
-    const logsFn = container.logs as any;
+    const logsFn: any = (container as any).logs;
 
-    logsFn(options, (err: any, streamResult: any) => {
+    logsFn.call(container, options, (err: any, streamResult: any) => {
       if (err) {
         reject(err);
         return;
@@ -266,44 +267,65 @@ export const streamContainerLogs = async (
   return cleanup;
 };
 
+const execFileAsync = promisify(execFile);
+
+const runDockerCompose = async (cwd: string, args: string[]) => {
+  const composeArgs = ["compose", ...args];
+  const { stdout, stderr } = await execFileAsync("docker", composeArgs, {
+    cwd,
+    env: process.env,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  if (stderr) {
+    console.warn("docker compose stderr:", stderr.toString());
+  }
+
+  return stdout.toString();
+};
+
+const getComposeServices = async (cwd: string, fileName: string): Promise<string[]> => {
+  const output = await runDockerCompose(cwd, ["-f", fileName, "config", "--services"]);
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((service) => service.toLowerCase() !== "dockmanage");
+};
+
 export const restartService = async (filePath: string): Promise<void> => {
-  // Convert the provided path into an absolute directory path
-  const absolutePath = toAbsolutePath(filePath)
+  const absolutePath = toAbsolutePath(filePath);
   console.log(`Running compose command in ${absolutePath}`);
-  // If filePath points to a file, get its directory
   const directory = path.dirname(absolutePath);
   const fileName = path.basename(absolutePath);
 
-  const config = { 
-    cwd: directory, 
-    config: fileName, // Ensures it uses the specific file provided
-    log: true 
-  };
-
   try {
     console.log(`Restarting services using: ${absolutePath}`);
-    
-    const result = await compose.configServices(config)
-    console.log("Found following services")
-    console.log(result.data.services)
-    const filteredService = result.data.services.filter((s) => s.toLowerCase() != "dockmanage");
-    await compose.downMany(filteredService,config);
-    await compose.pullMany(filteredService,config);
-    await compose.buildMany(filteredService,config);
-    await compose.upMany(filteredService,config);
-    
-    console.log('Restart complete.');
-  } catch (err: any) {
-    console.error('Failed to restart service:', err?.message ?? err);
+    const services = await getComposeServices(directory, fileName);
 
-    const conflictName = typeof err?.message === 'string' ? extractConflictingContainerName(err.message) : null;
+    if (services.length === 0) {
+      console.log("No services found to restart.");
+      return;
+    }
+
+    await runDockerCompose(directory, ["-f", fileName, "pull", ...services]);
+    await runDockerCompose(directory, ["-f", fileName, "build", ...services]);
+    await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
+
+    console.log("Restart complete.");
+  } catch (err: any) {
+    console.error("Failed to restart service:", err?.message ?? err);
+
+    const conflictName =
+      typeof err?.message === "string" ? extractConflictingContainerName(err.message) : null;
     if (conflictName) {
       const removed = await removeStoppedContainerIfExists(conflictName);
       if (removed) {
         try {
-          const retryResult = await compose.configServices(config);
-          const filteredService = retryResult.data.services.filter((s) => s.toLowerCase() !== 'dockmanage');
-          await compose.upMany(filteredService, config);
+          const services = await getComposeServices(directory, fileName);
+          if (services.length > 0) {
+            await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
+          }
           console.log(`Retry succeeded after removing stale container ${conflictName}.`);
           return;
         } catch (retryError: any) {

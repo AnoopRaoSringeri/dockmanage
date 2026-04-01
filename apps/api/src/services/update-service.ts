@@ -6,6 +6,7 @@ import { promisify } from "node:util";import { ApiError } from "../utils/api-res
 const execFileAsync = promisify(execFile);
 const repo = "AnoopRaoSringeri/dockmanage";
 const releaseApiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
+const tagsApiUrl = `https://api.github.com/repos/${repo}/tags`;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const webPackagePath = path.join(repoRoot, "apps", "web", "package.json");
@@ -70,10 +71,61 @@ export const getCurrentVersion = async (): Promise<string> => {
   return parsed.version;
 };
 
+const buildUpdateStatus = (
+  currentVersion: string,
+  latestVersion: string,
+  releaseUrl: string,
+  releaseName: string,
+): UpdateStatus => ({
+  currentVersion,
+  latestVersion,
+  releaseUrl,
+  releaseName,
+  updateAvailable: compareSemver(latestVersion, currentVersion) > 0,
+});
+
+const buildFallbackStatus = async (currentVersion: string): Promise<UpdateStatus> => ({
+  currentVersion,
+  latestVersion: currentVersion,
+  releaseUrl: `https://github.com/${repo}`,
+  releaseName: currentVersion,
+  updateAvailable: false,
+});
+
 export const getLatestRelease = async (): Promise<UpdateStatus> => {
+  const currentVersion = await getCurrentVersion();
+
   const response = await fetch(releaseApiUrl, {
     headers: { Accept: "application/vnd.github.v3+json" },
   });
+
+  if (response.status === 404) {
+    const tagsResponse = await fetch(tagsApiUrl, {
+      headers: { Accept: "application/vnd.github.v3+json" },
+    });
+
+    if (!tagsResponse.ok) {
+      return buildFallbackStatus(currentVersion);
+    }
+
+    const tags = await tagsResponse.json();
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return buildFallbackStatus(currentVersion);
+    }
+
+    const topTag = typeof tags[0].name === "string" ? tags[0].name : "";
+    const latestVersion = topTag.replace(/^v/i, "");
+    if (!latestVersion) {
+      return buildFallbackStatus(currentVersion);
+    }
+
+    return buildUpdateStatus(
+      currentVersion,
+      latestVersion,
+      `https://github.com/${repo}/releases/tag/${topTag}`,
+      topTag,
+    );
+  }
 
   if (!response.ok) {
     throw new ApiError(
@@ -88,17 +140,10 @@ export const getLatestRelease = async (): Promise<UpdateStatus> => {
   const releaseName = typeof json.name === "string" && json.name ? json.name : latestVersion;
 
   if (!latestVersion) {
-    throw new ApiError("Invalid release information received from GitHub", 502);
+    return buildFallbackStatus(currentVersion);
   }
 
-  const currentVersion = await getCurrentVersion();
-  return {
-    currentVersion,
-    latestVersion,
-    releaseUrl,
-    releaseName,
-    updateAvailable: compareSemver(latestVersion, currentVersion) > 0,
-  };
+  return buildUpdateStatus(currentVersion, latestVersion, releaseUrl, releaseName);
 };
 
 export const updateDockManage = async (): Promise<UpdateResult> => {

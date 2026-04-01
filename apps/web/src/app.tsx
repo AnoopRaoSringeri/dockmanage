@@ -1,8 +1,9 @@
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
 import { ConfigEditor } from "./components/config-editor";
 import { ContainersTable } from "./components/containers-table";
-import { fetchContainers, openContainerLogStream, runContainerAction } from "./lib/api-client";
+import { checkForUpdate, fetchContainers, openContainerLogStream, performUpdate, runContainerAction } from "./lib/api-client";
+import { UpdateResult, UpdateStatus } from "@dockmanage/types";
 
 type ContainerAction = "start" | "stop" | "restart";
 
@@ -15,6 +16,12 @@ export const App = () => {
   const [logSource, setLogSource] = useState<EventSource | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [releaseUrl, setReleaseUrl] = useState<string | null>(null);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateOutput, setUpdateOutput] = useState<string | null>(null);
 
   const containersQuery = useQuery({
     queryKey: ["containers"],
@@ -47,6 +54,51 @@ export const App = () => {
 
     return new Date(containersQuery.dataUpdatedAt).toLocaleTimeString();
   }, [containersQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    let didCancel = false;
+
+    const loadUpdateInfo = async () => {
+      try {
+        const updateInfo = await checkForUpdate();
+        if (didCancel) {
+          return;
+        }
+
+        setUpdateAvailable(updateInfo.updateAvailable);
+        setLatestVersion(updateInfo.latestVersion);
+        setReleaseUrl(updateInfo.releaseUrl);
+      } catch (error) {
+        if (!didCancel) {
+          setUpdateCheckError((error as Error).message);
+        }
+      }
+    };
+
+    void loadUpdateInfo();
+
+    return () => {
+      didCancel = true;
+    };
+  }, []);
+
+  const handlePerformUpdate = async () => {
+    setIsUpdating(true);
+    setUpdateOutput(null);
+    setUpdateCheckError(null);
+
+    try {
+      const result = await performUpdate();
+      setUpdateAvailable(false);
+      setLatestVersion(result.latestVersion);
+      setReleaseUrl(result.releaseUrl);
+      setUpdateOutput(result.output);
+    } catch (error) {
+      setUpdateCheckError((error as Error).message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const handleViewLogs = (id: string) => {
     setSelectedLogId(id);
@@ -102,14 +154,40 @@ export const App = () => {
         <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-300">{message}</div>
       ) : null}
 
-      {containersQuery.isLoading ? (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-sm text-zinc-300">Loading containers...</div>
+      {updateAvailable && latestVersion && releaseUrl ? (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              A new DockManage version is available: <strong>v{latestVersion}</strong>.
+              <a href={releaseUrl} target="_blank" rel="noreferrer" className="ml-2 underline">
+                View release
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={handlePerformUpdate}
+              disabled={isUpdating}
+              className="rounded-md border border-emerald-500 px-3 py-1.5 text-emerald-100 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isUpdating ? "Updating..." : "Update now"}
+            </button>
+          </div>
+          {updateOutput ? (
+            <pre className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-emerald-500/50 bg-emerald-950 p-3 text-xs text-emerald-100">
+              {updateOutput}
+            </pre>
+          ) : null}
+        </div>
       ) : null}
 
-      {containersQuery.isError ? (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-sm text-rose-300">
-          {(containersQuery.error as Error).message}
+      {updateCheckError ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Update check failed: {updateCheckError}
         </div>
+      ) : null}
+
+      {containersQuery.isLoading ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-sm text-zinc-300">Loading containers...</div>
       ) : null}
 
       {containersQuery.data ? (

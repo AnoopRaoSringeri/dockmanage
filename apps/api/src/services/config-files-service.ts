@@ -1,6 +1,7 @@
 import { ConfigFileContent, ConfigFileSummary } from "@dockmanage/types";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { ApiError } from "../utils/api-response.js";
 
 const defaultConfigDir = path.resolve(process.cwd(), "docker");
 const configDir = path.resolve(process.env.DOCKMANAGE_CONFIG_DIR ?? defaultConfigDir);
@@ -14,7 +15,7 @@ const resolveSafeConfigPath = (relativeConfigPath: string): string => {
   const fullPath = path.resolve(configDir, normalized);
 
   if (!fullPath.startsWith(configDir)) {
-    throw new Error("Invalid config path");
+    throw new ApiError("Invalid config path", 400);
   }
 
   return fullPath;
@@ -62,12 +63,22 @@ export const listConfigFiles = async (): Promise<ConfigFileSummary[]> => {
 export const readConfigFile = async (relativeConfigPath: string): Promise<ConfigFileContent> => {
   await ensureConfigDirectory();
   const fullPath = resolveSafeConfigPath(relativeConfigPath);
-  const content = await fs.readFile(fullPath, "utf8");
 
-  return {
-    path: toRelativePath(fullPath),
-    content,
-  };
+  try {
+    const content = await fs.readFile(fullPath, "utf8");
+
+    return {
+      path: toRelativePath(fullPath),
+      content,
+    };
+  } catch (error: unknown) {
+    const maybeErr = error as { code?: string; message?: string };
+    if (maybeErr?.code === "ENOENT") {
+      throw new ApiError("Config file not found", 404);
+    }
+
+    throw error;
+  }
 };
 
 export const saveConfigFile = async (relativeConfigPath: string, content: string): Promise<ConfigFileContent> => {
@@ -80,4 +91,10 @@ export const saveConfigFile = async (relativeConfigPath: string, content: string
     path: toRelativePath(fullPath),
     content,
   };
+};
+
+export const deleteConfigFile = async (relativeConfigPath: string): Promise<void> => {
+  await ensureConfigDirectory();
+  const fullPath = resolveSafeConfigPath(relativeConfigPath);
+  await fs.rm(fullPath, { force: true });
 };

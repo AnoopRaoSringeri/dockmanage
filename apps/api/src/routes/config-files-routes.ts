@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { readConfigQuerySchema, saveConfigBodySchema } from "../schemas/config-files-schemas.js";
-import { listConfigFiles, readConfigFile, saveConfigFile } from "../services/config-files-service.js";
+import { listConfigFiles, readConfigFile, saveConfigFile, deleteConfigFile } from "../services/config-files-service.js";
 import { sendError, sendSuccess } from "../utils/api-response.js";
 import { restartService } from "../services/containers-service.js";
 
@@ -37,8 +37,22 @@ configFilesRouter.post("/content", async (req, res, next) => {
     }
 
     const saved = await saveConfigFile(parsed.data.path, parsed.data.content);
-    await restartService(parsed.data.path)
+    await restartService(parsed.data.path);
     return sendSuccess(res, saved);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+configFilesRouter.delete("/content", async (req, res, next) => {
+  try {
+    const parsed = readConfigQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return sendError(res, parsed.error.issues[0]?.message ?? "Invalid request", 400);
+    }
+
+    await deleteConfigFile(parsed.data.path);
+    return sendSuccess(res, { message: "Config deleted" });
   } catch (error) {
     return next(error);
   }

@@ -19,6 +19,18 @@ export interface ConfigFileContent {
   content: string;
 }
 
+export interface UpdateStatus {
+  currentVersion: string;
+  latestVersion: string;
+  releaseUrl: string;
+  releaseName: string;
+  updateAvailable: boolean;
+}
+
+export interface UpdateResult extends UpdateStatus {
+  output: string;
+}
+
 export interface ApiSuccessResponse<T> {
   success: true;
   data: T;

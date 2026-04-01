@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { configFilesRouter } from "./routes/config-files-routes.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { containersRouter } from "./routes/containers-routes.js";
+import { updateRouter } from "./routes/update-routes.js";
 import { sendSuccess } from "./utils/api-response.js";
 
 export const app = express();
@@ -19,6 +20,7 @@ app.use(morgan("dev"));
 app.get("/api/health", (_req, res) => sendSuccess(res, { status: "ok" }));
 app.use("/api/containers", containersRouter);
 app.use("/api/config-files", configFilesRouter);
+app.use("/api/update", updateRouter);
 
 if (process.env.NODE_ENV === "production") {
   const currentFile = fileURLToPath(import.meta.url);

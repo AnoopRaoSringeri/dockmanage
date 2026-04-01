@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
+  deleteConfigFile,
   fetchConfigFileContent,
   fetchConfigFiles,
   saveConfigFileContent,
@@ -49,6 +50,21 @@ export const ConfigEditor = () => {
       setDraftPath(result.path);
       void queryClient.invalidateQueries({ queryKey: ["config-files"] });
       void queryClient.invalidateQueries({ queryKey: ["config-file-content", result.path] });
+    },
+    onError: (error: Error) => {
+      setMessage(error.message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteConfigFile,
+    onSuccess: async () => {
+      setMessage(`Deleted ${selectedPath}`);
+      setSelectedPath("");
+      setDraftPath("");
+      setEditorText("");
+      await queryClient.invalidateQueries({ queryKey: ["config-files"] });
+      await queryClient.invalidateQueries({ queryKey: ["config-file-content", selectedPath] });
     },
     onError: (error: Error) => {
       setMessage(error.message);
@@ -115,7 +131,7 @@ export const ConfigEditor = () => {
         />
       </label>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           disabled={!canSave}
@@ -123,6 +139,14 @@ export const ConfigEditor = () => {
           className="rounded-md border border-zinc-700 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saveMutation.isPending ? "Saving..." : "Save YAML"}
+        </button>
+        <button
+          type="button"
+          disabled={!selectedPath || deleteMutation.isPending}
+          onClick={() => selectedPath && deleteMutation.mutate(selectedPath)}
+          className="rounded-md border border-red-500 px-3 py-1.5 text-red-100 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {deleteMutation.isPending ? "Deleting..." : "Delete YAML"}
         </button>
         {!isValidConfigPath(draftPath) ? (
           <span className="text-xs text-amber-300">Path must end with .yml or .yaml</span>

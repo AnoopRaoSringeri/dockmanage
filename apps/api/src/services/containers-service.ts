@@ -5,26 +5,30 @@ import { docker } from "./docker-client.js";
 import path from "path";
 import stream from "node:stream";
 import { toAbsolutePath } from "./config-files-service.js";
+import { ApiError } from "../utils/api-response.js";
 
 const stripAnsi = (input: string): string =>
   input.replace(/\x1B[@-_][0-?]*[ -/]*[@-~]/g, "");
+
+const isReadableStream = (value: unknown): value is stream.Readable =>
+  Boolean(value && typeof (value as any).on === "function" && typeof (value as any).pipe === "function");
 
 const getContainerLogsSource = async (
   id: string,
   follow: boolean,
   tail = 100,
-): Promise<NodeJS.ReadableStream | Buffer> => {
+): Promise<stream.Readable | Buffer> => {
   const container = docker.getContainer(id);
   const options = { stdout: true, stderr: true, follow, tail } as any;
 
-  return new Promise<NodeJS.ReadableStream | Buffer>((resolve, reject) => {
+  return new Promise<stream.Readable | Buffer>((resolve, reject) => {
     container.logs(options, (err: unknown, streamResult: unknown) => {
       if (err) {
         reject(err);
         return;
       }
 
-      resolve(streamResult as NodeJS.ReadableStream | Buffer);
+      resolve(streamResult as stream.Readable | Buffer);
     });
   });
 };
@@ -45,6 +49,18 @@ const mapStateToStatus = (state: string): ContainerStatus => {
   return "unknown";
 };
 
+const formatDockerError = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof ApiError) {
+    return error;
+  }
+
+  const maybeErr = error as { code?: string; message?: string } | undefined;
+  const message = maybeErr?.message ? `${fallbackMessage}: ${maybeErr.message}` : fallbackMessage;
+  const status = maybeErr?.code === "ENOENT" ? 503 : 500;
+
+  return new ApiError(message, status);
+};
+
 export const listContainers = async (): Promise<ContainerSummary[]> => {
   try {
     const containers: Docker.ContainerInfo[] = await docker.listContainers({ all: true });
@@ -60,25 +76,38 @@ export const listContainers = async (): Promise<ContainerSummary[]> => {
   } catch (error) {
     const maybeErr = error as { code?: string; message?: string } | undefined;
     if (maybeErr?.code === "ENOENT") {
-      throw new Error(
+      throw new ApiError(
         "Cannot connect to Docker. On Windows: ensure Docker Desktop is running and your user is in the 'docker-users' group, then restart this app.",
+        503,
       );
     }
 
-    throw error;
+    throw formatDockerError(error, "Failed to list Docker containers");
   }
 };
 
 export const startContainer = async (id: string): Promise<void> => {
-  await docker.getContainer(id).start();
+  try {
+    await docker.getContainer(id).start();
+  } catch (error) {
+    throw formatDockerError(error, `Failed to start container '${id}'`);
+  }
 };
 
 export const stopContainer = async (id: string): Promise<void> => {
-  await docker.getContainer(id).stop();
+  try {
+    await docker.getContainer(id).stop();
+  } catch (error) {
+    throw formatDockerError(error, `Failed to stop container '${id}'`);
+  }
 };
 
 export const restartContainer = async (id: string): Promise<void> => {
-  await docker.getContainer(id).restart();
+  try {
+    await docker.getContainer(id).restart();
+  } catch (error) {
+    throw formatDockerError(error, `Failed to restart container '${id}'`);
+  }
 };
 
 export const fetchContainerLogs = async (id: string): Promise<string> => {
@@ -86,6 +115,10 @@ export const fetchContainerLogs = async (id: string): Promise<string> => {
 
   if (Buffer.isBuffer(logStreamOrBuffer)) {
     return stripAnsi(logStreamOrBuffer.toString("utf8"));
+  }
+
+  if (!isReadableStream(logStreamOrBuffer)) {
+    return "";
   }
 
   const stdoutStream = new stream.PassThrough();
@@ -122,6 +155,11 @@ export const streamContainerLogs = async (
 
   if (Buffer.isBuffer(logStreamOrBuffer)) {
     onData(stripAnsi(logStreamOrBuffer.toString("utf8")));
+    onEnd();
+    return () => {};
+  }
+
+  if (!isReadableStream(logStreamOrBuffer)) {
     onEnd();
     return () => {};
   }

@@ -8,6 +8,7 @@ import {
   fetchContainers,
   openContainerLogStream,
   performUpdate,
+  pruneStoppedContainers,
   pruneUnusedImages,
   runContainerAction,
 } from "./lib/api-client";

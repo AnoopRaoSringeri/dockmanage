@@ -39,6 +39,7 @@ export const fetchConfigFiles = async () => getApiData(client.get("/config-files
 export const checkForUpdate = async () => getApiData(client.get("/update/check"));
 export const performUpdate = async () => getApiData(client.post("/update/perform"));
 export const pruneUnusedImages = async () => getApiData(client.post("/containers/prune-images"));
+export const pruneStoppedContainers = async () => getApiData(client.post("/containers/prune-containers"));
 export const deleteConfigFile = async (path) => {
     await getApiData(client.delete("/config-files/content", {
         params: { path },

@@ -1,5 +1,5 @@
 import { ContainerStatus, ContainerSummary } from "@dockmanage/types";
-import Docker, { type PruneImagesInfo } from "dockerode";
+import Docker, { type ContainerLogsOptions, type PruneImagesInfo } from "dockerode";
 import compose from "docker-compose";
 import { docker } from "./docker-client.js";
 import path from "path";
@@ -19,16 +19,21 @@ const getContainerLogsSource = async (
   tail = 100,
 ): Promise<stream.Readable | Buffer> => {
   const container = docker.getContainer(id);
-  const options = { stdout: true, stderr: true, follow, tail } as any;
+  const options = {
+    stdout: true,
+    stderr: true,
+    follow: follow ? true : false,
+    tail,
+  } as ContainerLogsOptions;
 
   return new Promise<stream.Readable | Buffer>((resolve, reject) => {
-    container.logs(options, (err: unknown, streamResult: unknown) => {
+    container.logs(options, (err: Error | null, streamResult: stream.Readable | Buffer) => {
       if (err) {
         reject(err);
         return;
       }
 
-      resolve(streamResult as stream.Readable | Buffer);
+      resolve(streamResult);
     });
   });
 };
@@ -290,7 +295,27 @@ export const restartService = async (filePath: string): Promise<void> => {
     
     console.log('Restart complete.');
   } catch (err: any) {
-    console.error('Failed to restart service:', err.message);
-    throw err; // Re-throw so the caller knows it failed
+    console.error('Failed to restart service:', err?.message ?? err);
+
+    const conflictName = typeof err?.message === 'string' ? extractConflictingContainerName(err.message) : null;
+    if (conflictName) {
+      const removed = await removeStoppedContainerIfExists(conflictName);
+      if (removed) {
+        try {
+          const retryResult = await compose.configServices(config);
+          const filteredService = retryResult.data.services.filter((s) => s.toLowerCase() !== 'dockmanage');
+          await compose.upMany(filteredService, config);
+          console.log(`Retry succeeded after removing stale container ${conflictName}.`);
+          return;
+        } catch (retryError: any) {
+          throw new ApiError(
+            `Failed to restart service after removing stale container '${conflictName}': ${retryError?.message ?? String(retryError)}`,
+            500,
+          );
+        }
+      }
+    }
+
+    throw new ApiError(`Failed to restart service: ${err?.message ?? String(err)}`, 500);
   }
 };

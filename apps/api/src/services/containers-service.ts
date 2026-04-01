@@ -1,5 +1,5 @@
 import { ContainerStatus, ContainerSummary } from "@dockmanage/types";
-import Docker, { type ContainerLogsOptions, type PruneImagesInfo } from "dockerode";
+import Docker, { type PruneImagesInfo } from "dockerode";
 import compose from "docker-compose";
 import { docker } from "./docker-client.js";
 import path from "path";
@@ -19,21 +19,20 @@ const getContainerLogsSource = async (
   tail = 100,
 ): Promise<stream.Readable | Buffer> => {
   const container = docker.getContainer(id);
-  const options = {
-    stdout: true,
-    stderr: true,
-    follow: follow ? true : false,
-    tail,
-  } as ContainerLogsOptions;
+  const options = follow
+    ? { stdout: true, stderr: true, follow: true, tail }
+    : { stdout: true, stderr: true, follow: false, tail };
 
   return new Promise<stream.Readable | Buffer>((resolve, reject) => {
-    container.logs(options, (err: Error | null, streamResult: stream.Readable | Buffer) => {
+    const logsFn = container.logs as any;
+
+    logsFn(options, (err: any, streamResult: any) => {
       if (err) {
         reject(err);
         return;
       }
 
-      resolve(streamResult);
+      resolve(streamResult as stream.Readable | Buffer);
     });
   });
 };

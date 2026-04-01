@@ -22,7 +22,7 @@ containersRouter.post("/prune-images", async (_req, res, next) => {
   try {
     const result = await pruneUnusedImages();
     return sendSuccess(res, result);
-  } catch (error) {
+  } catch (error: unknown) {
     return next(error);
   }
 });
@@ -31,7 +31,7 @@ containersRouter.post("/prune-containers", async (_req, res, next) => {
   try {
     const result = await pruneStoppedContainers();
     return sendSuccess(res, result);
-  } catch (error) {
+  } catch (error: unknown) {
     return next(error);
   }
 });
@@ -40,7 +40,7 @@ containersRouter.get("/", async (_req, res, next) => {
   try {
     const containers = await listContainers();
     return sendSuccess(res, containers);
-  } catch (error) {
+  } catch (error: unknown) {
     return next(error);
   }
 });
@@ -54,7 +54,7 @@ containersRouter.post("/:id/start", async (req, res, next) => {
 
     await startContainer(parsed.data.id);
     return sendSuccess(res, { message: "Container started" });
-  } catch (error) {
+  } catch (error: unknown) {
     return next(error);
   }
 });
@@ -68,7 +68,7 @@ containersRouter.post("/:id/stop", async (req, res, next) => {
 
     await stopContainer(parsed.data.id);
     return sendSuccess(res, { message: "Container stopped" });
-  } catch (error) {
+  } catch (error: unknown) {
     return next(error);
   }
 });
@@ -145,7 +145,7 @@ containersRouter.get("/:id/logs", async (req, res, next) => {
     );
 
     req.on("close", stop);
-  } catch (error) {
+  } catch (error: unknown) {
     return next(error);
   }
 });

@@ -6,6 +6,7 @@ import {
   startContainer,
   stopContainer,
   fetchContainerLogs,
+  streamContainerLogs,
 } from "../services/containers-service.js";
 import { sendError, sendSuccess } from "../utils/api-response.js";
 
@@ -73,8 +74,47 @@ containersRouter.get("/:id/logs", async (req, res, next) => {
       return sendError(res, parsed.error.issues[0]?.message ?? "Invalid id", 400);
     }
 
-    const logs = await fetchContainerLogs(parsed.data.id);
-    return sendSuccess(res, logs);
+    const streamMode = req.query.stream === "true";
+    if (!streamMode) {
+      const logs = await fetchContainerLogs(parsed.data.id);
+      return sendSuccess(res, logs);
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    let finished = false;
+    const sendEvent = (text: string) => {
+      const payload = text.replace(/\r?\n/g, "\ndata: ");
+      res.write(`data: ${payload}\n\n`);
+    };
+
+    const cleanup = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      res.end();
+    };
+
+    req.on("close", cleanup);
+
+    const stop = await streamContainerLogs(
+      parsed.data.id,
+      sendEvent,
+      (error: unknown) => {
+        if (!finished) {
+          res.write(`event: error\ndata: ${JSON.stringify(String(error))}\n\n`);
+        }
+        cleanup();
+      },
+      cleanup,
+      100,
+    );
+
+    req.on("close", stop);
   } catch (error) {
     return next(error);
   }

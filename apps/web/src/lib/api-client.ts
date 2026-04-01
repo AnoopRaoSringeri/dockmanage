@@ -42,6 +42,25 @@ export const fetchConfigFiles = async (): Promise<ConfigFileSummary[]> => {
   return data.data;
 };
 
+export const openContainerLogStream = (
+  id: string,
+  onMessage: (line: string) => void,
+  onError: (error: string) => void,
+): EventSource => {
+  const source = new EventSource(`/api/containers/${encodeURIComponent(id)}/logs?stream=true`);
+
+  source.onmessage = (event) => {
+    onMessage(event.data);
+  };
+
+  source.onerror = () => {
+    onError("Log stream disconnected");
+    source.close();
+  };
+
+  return source;
+};
+
 export const fetchConfigFileContent = async (configPath: string): Promise<ConfigFileContent> => {
   const { data } = await client.get<ApiResponse<ConfigFileContent>>("/config-files/content", {
     params: { path: configPath },

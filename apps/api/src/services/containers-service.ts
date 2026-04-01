@@ -6,6 +6,29 @@ import path from "path";
 import stream from "node:stream";
 import { toAbsolutePath } from "./config-files-service.js";
 
+const stripAnsi = (input: string): string =>
+  input.replace(/\x1B[@-_][0-?]*[ -/]*[@-~]/g, "");
+
+const getContainerLogsSource = async (
+  id: string,
+  follow: boolean,
+  tail = 100,
+): Promise<NodeJS.ReadableStream | Buffer> => {
+  const container = docker.getContainer(id);
+  const options = { stdout: true, stderr: true, follow, tail } as any;
+
+  return new Promise<NodeJS.ReadableStream | Buffer>((resolve, reject) => {
+    container.logs(options, (err: unknown, streamResult: unknown) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      resolve(streamResult as NodeJS.ReadableStream | Buffer);
+    });
+  });
+};
+
 const mapStateToStatus = (state: string): ContainerStatus => {
   if (state === "running") {
     return "running";
@@ -59,20 +82,10 @@ export const restartContainer = async (id: string): Promise<void> => {
 };
 
 export const fetchContainerLogs = async (id: string): Promise<string> => {
-  const container = docker.getContainer(id);
-  const logStreamOrBuffer = await new Promise<NodeJS.ReadableStream | Buffer>((resolve, reject) => {
-    container.logs({ stdout: true, stderr: true, follow: false, tail: 200 }, (err, stream) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-
-      resolve(stream as NodeJS.ReadableStream | Buffer);
-    });
-  });
+  const logStreamOrBuffer = await getContainerLogsSource(id, false, 200);
 
   if (Buffer.isBuffer(logStreamOrBuffer)) {
-    return logStreamOrBuffer.toString("utf8");
+    return stripAnsi(logStreamOrBuffer.toString("utf8"));
   }
 
   const stdoutStream = new stream.PassThrough();
@@ -95,7 +108,52 @@ export const fetchContainerLogs = async (id: string): Promise<string> => {
     logStreamOrBuffer.on("error", reject);
   });
 
-  return Buffer.concat([...chunks, ...errChunks]).toString("utf8");
+  return stripAnsi(Buffer.concat([...chunks, ...errChunks]).toString("utf8"));
+};
+
+export const streamContainerLogs = async (
+  id: string,
+  onData: (text: string) => void,
+  onError: (error: unknown) => void,
+  onEnd: () => void,
+  tail = 100,
+): Promise<() => void> => {
+  const logStreamOrBuffer = await getContainerLogsSource(id, true, tail);
+
+  if (Buffer.isBuffer(logStreamOrBuffer)) {
+    onData(stripAnsi(logStreamOrBuffer.toString("utf8")));
+    onEnd();
+    return () => {};
+  }
+
+  const stdoutStream = new stream.PassThrough();
+  const stderrStream = new stream.PassThrough();
+  docker.modem.demuxStream(logStreamOrBuffer, stdoutStream, stderrStream);
+
+  const pushLog = (chunk: Buffer) => {
+    const text = stripAnsi(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : Buffer.from(chunk).toString("utf8"));
+    if (!text.trim()) {
+      return;
+    }
+
+    onData(text);
+  };
+
+  stdoutStream.on("data", pushLog);
+  stderrStream.on("data", (chunk) => pushLog(Buffer.from("[stderr] " + chunk)));
+
+  const cleanup = () => {
+    stdoutStream.removeAllListeners();
+    stderrStream.removeAllListeners();
+    (logStreamOrBuffer as any).destroy?.();
+    onEnd();
+  };
+
+  logStreamOrBuffer.on("end", cleanup);
+  logStreamOrBuffer.on("close", cleanup);
+  logStreamOrBuffer.on("error", onError);
+
+  return cleanup;
 };
 
 export const restartService = async (filePath: string): Promise<void> => {
@@ -118,10 +176,11 @@ export const restartService = async (filePath: string): Promise<void> => {
     const result = await compose.configServices(config)
     console.log("Found following services")
     console.log(result.data.services)
-    await compose.downMany(result.data.services.filter((s) => s.toLowerCase() != "dockmanage"),config);
-    await compose.pullAll(config);
-    await compose.buildAll(config);
-    await compose.upAll(config);
+    const filteredService = result.data.services.filter((s) => s.toLowerCase() != "dockmanage");
+    await compose.downMany(filteredService,config);
+    await compose.pullMany(filteredService,config);
+    await compose.buildMany(filteredService,config);
+    await compose.upMany(filteredService,config);
     
     console.log('Restart complete.');
   } catch (err: any) {

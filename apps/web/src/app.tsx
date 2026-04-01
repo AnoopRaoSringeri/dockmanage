@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ConfigEditor } from "./components/config-editor";
 import { ContainersTable } from "./components/containers-table";
-import { fetchContainers, fetchContainerLogs, runContainerAction } from "./lib/api-client";
+import { fetchContainers, openContainerLogStream, runContainerAction } from "./lib/api-client";
 
 type ContainerAction = "start" | "stop" | "restart";
 
@@ -12,6 +12,7 @@ export const App = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [selectedLogs, setSelectedLogs] = useState<string | null>(null);
+  const [logSource, setLogSource] = useState<EventSource | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
 
@@ -47,20 +48,33 @@ export const App = () => {
     return new Date(containersQuery.dataUpdatedAt).toLocaleTimeString();
   }, [containersQuery.dataUpdatedAt]);
 
-  const handleViewLogs = async (id: string) => {
+  const handleViewLogs = (id: string) => {
     setSelectedLogId(id);
-    setSelectedLogs(null);
+    setSelectedLogs("");
     setLogsError(null);
     setLogsLoading(true);
 
-    try {
-      const logs = await fetchContainerLogs(id);
-      setSelectedLogs(logs || "(no logs available)");
-    } catch (error) {
-      setLogsError((error as Error).message);
-    } finally {
-      setLogsLoading(false);
+    if (logSource) {
+      logSource.close();
     }
+
+    const source = openContainerLogStream(
+      id,
+      (line) => {
+        setSelectedLogs((previous) => (previous ? `${previous}\n${line}` : line));
+        setLogsLoading(false);
+      },
+      (errorMessage) => {
+        setLogsError(errorMessage);
+        setLogsLoading(false);
+      },
+    );
+
+    source.onopen = () => {
+      setLogsLoading(false);
+    };
+
+    setLogSource(source);
   };
 
   const closeLogs = () => {
@@ -68,6 +82,10 @@ export const App = () => {
     setSelectedLogs(null);
     setLogsError(null);
     setLogsLoading(false);
+    if (logSource) {
+      logSource.close();
+      setLogSource(null);
+    }
   };
 
   return (

@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfigEditor } from "./components/config-editor";
 import { ContainersTable } from "./components/containers-table";
-import { checkForUpdate, fetchContainers, openContainerLogStream, performUpdate, runContainerAction } from "./lib/api-client";
+import {
+  checkForUpdate,
+  fetchContainerLogs,
+  fetchContainers,
+  openContainerLogStream,
+  performUpdate,
+  pruneUnusedImages,
+  runContainerAction,
+} from "./lib/api-client";
 import { UpdateResult, UpdateStatus } from "@dockmanage/types";
 
 type ContainerAction = "start" | "stop" | "restart";
@@ -44,6 +52,22 @@ export const App = () => {
     },
     onSettled: () => {
       setBusyId(null);
+    },
+  });
+
+  const pruneImagesMutation = useMutation({
+    mutationFn: () => pruneUnusedImages(),
+    onMutate: () => {
+      setMessage("Pruning unused images...");
+    },
+    onSuccess: (result) => {
+      const deleted = result.ImagesDeleted?.length ?? 0;
+      const reclaimed = result.SpaceReclaimed ?? 0;
+      setMessage(`Pruned ${deleted} images and reclaimed ${reclaimed} bytes.`);
+      void queryClient.invalidateQueries({ queryKey: ["containers"] });
+    },
+    onError: (error: Error) => {
+      setMessage(error.message);
     },
   });
 
@@ -100,6 +124,25 @@ export const App = () => {
     }
   };
 
+  const loadLogsSnapshot = async (id: string, fallbackMessage?: string) => {
+    if (fallbackMessage) {
+      setLogsError(fallbackMessage);
+    }
+
+    setLogsLoading(true);
+    setSelectedLogs("");
+
+    try {
+      const logs = await fetchContainerLogs(id);
+      setSelectedLogs(logs || "No logs available.");
+      setLogsError(null);
+    } catch (error) {
+      setLogsError((error as Error).message);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
   const handleViewLogs = (id: string) => {
     setSelectedLogId(id);
     setSelectedLogs("");
@@ -118,12 +161,14 @@ export const App = () => {
       },
       (errorMessage) => {
         setLogsError(errorMessage);
-        setLogsLoading(false);
+        setLogsLoading(true);
+        void loadLogsSnapshot(id, "Live log stream failed, loading log snapshot...");
       },
     );
 
     source.onopen = () => {
       setLogsLoading(false);
+      setLogsError(null);
     };
 
     setLogSource(source);
@@ -148,6 +193,14 @@ export const App = () => {
           <p className="text-sm text-zinc-400">Lightweight Docker service manager</p>
         </div>
         <div className="text-sm text-zinc-400">Last sync: {lastUpdatedAt}</div>
+        <button
+          type="button"
+          onClick={() => pruneImagesMutation.mutate()}
+          disabled={pruneImagesMutation.isPending}
+          className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pruneImagesMutation.isPending ? "Pruning images..." : "Prune unused images"}
+        </button>
       </header>
 
       {message ? (

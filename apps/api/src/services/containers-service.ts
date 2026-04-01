@@ -1,5 +1,5 @@
 import { ContainerStatus, ContainerSummary } from "@dockmanage/types";
-import Docker from "dockerode";
+import Docker, { type PruneImagesInfo } from "dockerode";
 import compose from "docker-compose";
 import { docker } from "./docker-client.js";
 import path from "path";
@@ -107,6 +107,31 @@ export const restartContainer = async (id: string): Promise<void> => {
     await docker.getContainer(id).restart();
   } catch (error) {
     throw formatDockerError(error, `Failed to restart container '${id}'`);
+  }
+};
+
+export const pruneUnusedImages = async (): Promise<PruneImagesInfo> => {
+  try {
+    return await new Promise<PruneImagesInfo>((resolve, reject) => {
+      docker.pruneImages(
+        { filters: JSON.stringify({ dangling: ["false"] }) } as any,
+        (err: unknown, result: PruneImagesInfo | undefined) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          if (!result) {
+            reject(new Error("Docker returned no prune result."));
+            return;
+          }
+
+          resolve(result);
+        },
+      );
+    });
+  } catch (error) {
+    throw formatDockerError(error, "Failed to prune unused Docker images");
   }
 };
 

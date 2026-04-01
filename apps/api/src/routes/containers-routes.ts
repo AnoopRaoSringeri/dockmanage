@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   listContainers,
+  pruneUnusedImages,
   restartContainer,
   startContainer,
   stopContainer,
@@ -15,6 +16,15 @@ const paramsSchema = z.object({
 });
 
 export const containersRouter = Router();
+
+containersRouter.post("/prune-images", async (_req, res, next) => {
+  try {
+    const result = await pruneUnusedImages();
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+});
 
 containersRouter.get("/", async (_req, res, next) => {
   try {

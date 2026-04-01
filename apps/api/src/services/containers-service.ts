@@ -61,6 +61,27 @@ const formatDockerError = (error: unknown, fallbackMessage: string) => {
   return new ApiError(message, status);
 };
 
+const extractConflictingContainerName = (errorMessage: string): string | null => {
+  const match = errorMessage.match(/The container name "\/([^\"]+)"/i);
+  return match ? match[1] : null;
+};
+
+const removeStoppedContainerIfExists = async (name: string): Promise<boolean> => {
+  try {
+    const container = docker.getContainer(name);
+    const state = await container.inspect();
+
+    if (state?.State?.Running) {
+      return false;
+    }
+
+    await container.remove({ force: true });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const listContainers = async (): Promise<ContainerSummary[]> => {
   try {
     const containers: Docker.ContainerInfo[] = await docker.listContainers({ all: true });
@@ -132,6 +153,28 @@ export const pruneUnusedImages = async (): Promise<PruneImagesInfo> => {
     });
   } catch (error) {
     throw formatDockerError(error, "Failed to prune unused Docker images");
+  }
+};
+
+export const pruneStoppedContainers = async (): Promise<Docker.PruneContainersInfo> => {
+  try {
+    return await new Promise<Docker.PruneContainersInfo>((resolve, reject) => {
+      docker.pruneContainers({}, (err: unknown, result: Docker.PruneContainersInfo | undefined) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        if (!result) {
+          reject(new Error("Docker returned no prune result."));
+          return;
+        }
+
+        resolve(result);
+      });
+    });
+  } catch (error) {
+    throw formatDockerError(error, "Failed to prune stopped Docker containers");
   }
 };
 

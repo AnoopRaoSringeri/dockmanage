@@ -71,6 +71,22 @@ export const App = () => {
     },
   });
 
+  const pruneContainersMutation = useMutation({
+    mutationFn: () => pruneStoppedContainers(),
+    onMutate: () => {
+      setMessage("Pruning stopped containers...");
+    },
+    onSuccess: (result) => {
+      const deleted = result.ContainersDeleted?.length ?? 0;
+      const reclaimed = result.SpaceReclaimed ?? 0;
+      setMessage(`Removed ${deleted} stopped containers and reclaimed ${reclaimed} bytes.`);
+      void queryClient.invalidateQueries({ queryKey: ["containers"] });
+    },
+    onError: (error: Error) => {
+      setMessage(error.message);
+    },
+  });
+
   const lastUpdatedAt = useMemo(() => {
     if (!containersQuery.dataUpdatedAt) {
       return "Not synced yet";
@@ -153,13 +169,23 @@ export const App = () => {
       logSource.close();
     }
 
+    let streamOpened = false;
+    const fallbackTimer = window.setTimeout(() => {
+      if (!streamOpened) {
+        void loadLogsSnapshot(id, "Live log stream did not open, loading log snapshot...");
+      }
+    }, 2500);
+
     const source = openContainerLogStream(
       id,
       (line) => {
+        streamOpened = true;
+        clearTimeout(fallbackTimer);
         setSelectedLogs((previous) => (previous ? `${previous}\n${line}` : line));
         setLogsLoading(false);
       },
       (errorMessage) => {
+        clearTimeout(fallbackTimer);
         setLogsError(errorMessage);
         setLogsLoading(true);
         void loadLogsSnapshot(id, "Live log stream failed, loading log snapshot...");
@@ -167,6 +193,8 @@ export const App = () => {
     );
 
     source.onopen = () => {
+      streamOpened = true;
+      clearTimeout(fallbackTimer);
       setLogsLoading(false);
       setLogsError(null);
     };
@@ -193,14 +221,24 @@ export const App = () => {
           <p className="text-sm text-zinc-400">Lightweight Docker service manager</p>
         </div>
         <div className="text-sm text-zinc-400">Last sync: {lastUpdatedAt}</div>
-        <button
-          type="button"
-          onClick={() => pruneImagesMutation.mutate()}
-          disabled={pruneImagesMutation.isPending}
-          className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {pruneImagesMutation.isPending ? "Pruning images..." : "Prune unused images"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => pruneImagesMutation.mutate()}
+            disabled={pruneImagesMutation.isPending}
+            className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pruneImagesMutation.isPending ? "Pruning images..." : "Prune unused images"}
+          </button>
+          <button
+            type="button"
+            onClick={() => pruneContainersMutation.mutate()}
+            disabled={pruneContainersMutation.isPending}
+            className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pruneContainersMutation.isPending ? "Pruning containers..." : "Prune stopped containers"}
+          </button>
+        </div>
       </header>
 
       {message ? (

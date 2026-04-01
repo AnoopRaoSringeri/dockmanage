@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   listContainers,
+  pruneStoppedContainers,
   pruneUnusedImages,
   restartContainer,
   startContainer,
@@ -20,6 +21,15 @@ export const containersRouter = Router();
 containersRouter.post("/prune-images", async (_req, res, next) => {
   try {
     const result = await pruneUnusedImages();
+    return sendSuccess(res, result);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+containersRouter.post("/prune-containers", async (_req, res, next) => {
+  try {
+    const result = await pruneStoppedContainers();
     return sendSuccess(res, result);
   } catch (error) {
     return next(error);
@@ -93,7 +103,9 @@ containersRouter.get("/:id/logs", async (req, res, next) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders?.();
+    res.write(`:\n\n`);
 
     let finished = false;
     const sendEvent = (text: string) => {
@@ -101,11 +113,19 @@ containersRouter.get("/:id/logs", async (req, res, next) => {
       res.write(`data: ${payload}\n\n`);
     };
 
+    const keepAlive = setInterval(() => {
+      if (finished) {
+        return;
+      }
+      res.write(`:\n\n`);
+    }, 15000);
+
     const cleanup = () => {
       if (finished) {
         return;
       }
       finished = true;
+      clearInterval(keepAlive);
       res.end();
     };
 

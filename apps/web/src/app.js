@@ -129,15 +129,26 @@ export const App = () => {
         if (logSource) {
             logSource.close();
         }
+        let streamOpened = false;
+        const fallbackTimer = window.setTimeout(() => {
+            if (!streamOpened) {
+                void loadLogsSnapshot(id, "Live log stream did not open, loading log snapshot...");
+            }
+        }, 2500);
         const source = openContainerLogStream(id, (line) => {
+            streamOpened = true;
+            clearTimeout(fallbackTimer);
             setSelectedLogs((previous) => (previous ? `${previous}\n${line}` : line));
             setLogsLoading(false);
         }, (errorMessage) => {
+            clearTimeout(fallbackTimer);
             setLogsError(errorMessage);
             setLogsLoading(true);
             void loadLogsSnapshot(id, "Live log stream failed, loading log snapshot...");
         });
         source.onopen = () => {
+            streamOpened = true;
+            clearTimeout(fallbackTimer);
             setLogsLoading(false);
             setLogsError(null);
         };

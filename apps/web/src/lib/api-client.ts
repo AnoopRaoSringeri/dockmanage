@@ -62,11 +62,19 @@ export interface PruneImagesResult {
   SpaceReclaimed?: number;
 }
 
+export interface PruneContainersResult {
+  ContainersDeleted?: string[];
+  SpaceReclaimed?: number;
+}
+
 export const performUpdate = async (): Promise<UpdateResult> =>
   getApiData(client.post<ApiResponse<UpdateResult>>("/update/perform"));
 
 export const pruneUnusedImages = async (): Promise<PruneImagesResult> =>
   getApiData(client.post<ApiResponse<PruneImagesResult>>("/containers/prune-images"));
+
+export const pruneStoppedContainers = async (): Promise<PruneContainersResult> =>
+  getApiData(client.post<ApiResponse<PruneContainersResult>>("/containers/prune-containers"));
 
 export const deleteConfigFile = async (path: string): Promise<void> => {
   await getApiData(client.delete<ApiResponse<{ message: string }>>("/config-files/content", {

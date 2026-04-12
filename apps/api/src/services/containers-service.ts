@@ -308,6 +308,8 @@ export const restartService = async (filePath: string): Promise<void> => {
       return;
     }
 
+    console.log(`Restarting following services: ${services.map((s) => s).join(", ")}`)
+    await runDockerCompose(directory, ["-f", fileName, "down", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "pull", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "build", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);

@@ -313,8 +313,7 @@ export const restartService = async (filePath: string): Promise<void> => {
     await runDockerCompose(directory, ["-f", fileName, "rm", "-f", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "pull", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "build", ...services]);
-    // Use --no-deps to avoid starting service dependencies such as the dockmanage orchestrator
-    await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-deps", "--no-recreate", ...services]);
+    await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
 
     console.log("Restart complete.");
   } catch (err: any) {

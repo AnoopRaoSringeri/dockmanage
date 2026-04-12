@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   node:
     image: anoopraosringeri/sketch-now-server    # built in CI/CD

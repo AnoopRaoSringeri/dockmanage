@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   dockmanage:
     image: ${DOCKMANAGE_IMAGE:-anoopraosringeri/dockmanage:latest}

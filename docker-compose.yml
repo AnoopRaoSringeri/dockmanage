@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Main compose file that includes all services
 # Split into separate files for better organization:
 # - docker-compose.app.yml: node and nginx services

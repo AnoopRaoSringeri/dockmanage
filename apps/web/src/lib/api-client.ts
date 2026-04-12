@@ -57,6 +57,9 @@ export const fetchConfigFiles = async (): Promise<ConfigFileSummary[]> =>
 export const checkForUpdate = async (): Promise<UpdateStatus> =>
   getApiData(client.get<ApiResponse<UpdateStatus>>("/update/check"));
 
+export const performUpdate = async (): Promise<UpdateResult> =>
+  getApiData(client.post<ApiResponse<UpdateResult>>("/update/perform"));
+
 export interface PruneImagesResult {
   ImagesDeleted?: string[];
   SpaceReclaimed?: number;
@@ -66,9 +69,6 @@ export interface PruneContainersResult {
   ContainersDeleted?: string[];
   SpaceReclaimed?: number;
 }
-
-export const performUpdate = async (): Promise<UpdateResult> =>
-  getApiData(client.post<ApiResponse<UpdateResult>>("/update/perform"));
 
 export const pruneUnusedImages = async (): Promise<PruneImagesResult> =>
   getApiData(client.post<ApiResponse<PruneImagesResult>>("/containers/prune-images"));

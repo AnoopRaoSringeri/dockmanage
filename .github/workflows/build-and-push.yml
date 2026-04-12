@@ -47,3 +47,20 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          body: |
+            ## Docker Image
+            Docker Hub: `${{ vars.DOCKER_USERNAME }}/dockmanage:${{ steps.bump.outputs.new_tag }}`
+            
+            To update DockManage to this version:
+            ```bash
+            docker pull ${{ vars.DOCKER_USERNAME }}/dockmanage:${{ steps.bump.outputs.new_tag }}
+            docker-compose up -d dockmanage
+            ```
+          prerelease: ${{ steps.bump.outputs.is_new_tag == 'false' }}

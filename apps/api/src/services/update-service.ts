@@ -1,15 +1,11 @@
 import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import fs from "node:fs/promises";
-import path from "path";
-import { promisify } from "node:util";import { ApiError } from "../utils/api-response.js";
+import { promisify } from "node:util";
+import { docker } from "./docker-client.js";
+import { ApiError } from "../utils/api-response.js";
+
 const execFileAsync = promisify(execFile);
 const repo = "AnoopRaoSringeri/dockmanage";
-const releaseApiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
 const tagsApiUrl = `https://api.github.com/repos/${repo}/tags`;
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const webPackagePath = path.join(repoRoot, "apps", "web", "package.json");
 
 const parseSemver = (version: string): number[] =>
   version
@@ -37,17 +33,6 @@ const compareSemver = (a: string, b: string): number => {
   return 0;
 };
 
-const getNpmCommand = (): string => (process.platform === "win32" ? "npm.cmd" : "npm");
-
-const runCommand = async (command: string, args: string[]) => {
-  const { stdout, stderr } = await execFileAsync(command, args, {
-    cwd: repoRoot,
-    windowsHide: true,
-  });
-
-  return { stdout: stdout.trim(), stderr: stderr.trim() };
-};
-
 export interface UpdateStatus {
   currentVersion: string;
   latestVersion: string;
@@ -61,14 +46,28 @@ export interface UpdateResult extends UpdateStatus {
 }
 
 export const getCurrentVersion = async (): Promise<string> => {
-  const packageJson = await fs.readFile(webPackagePath, "utf8");
-  const parsed = JSON.parse(packageJson) as { version?: string };
+  try {
+    const containers: any[] = await docker.listContainers({ all: true });
+    const dockmanageContainer = containers.find(
+      c => c.Names?.some((name: string) => name.includes("dockmanage")) ||
+           c.Image?.includes("dockmanage")
+    );
 
-  if (!parsed.version) {
-    throw new ApiError("Could not read current version from apps/web/package.json", 500);
+    if (!dockmanageContainer) {
+      throw new ApiError("DockManage container not found", 500);
+    }
+
+    const image = dockmanageContainer.Image;
+    const imageParts = image.split(":");
+    const version = imageParts.length > 1 ? imageParts[imageParts.length - 1] : "unknown";
+
+    return version;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError("Failed to get DockManage container version", 500);
   }
-
-  return parsed.version;
 };
 
 const buildUpdateStatus = (
@@ -84,39 +83,41 @@ const buildUpdateStatus = (
   updateAvailable: compareSemver(latestVersion, currentVersion) > 0,
 });
 
-const buildFallbackStatus = async (currentVersion: string): Promise<UpdateStatus> => ({
-  currentVersion,
-  latestVersion: currentVersion,
-  releaseUrl: `https://github.com/${repo}`,
-  releaseName: currentVersion,
-  updateAvailable: false,
-});
-
 export const getLatestRelease = async (): Promise<UpdateStatus> => {
   const currentVersion = await getCurrentVersion();
 
-  const response = await fetch(releaseApiUrl, {
-    headers: { Accept: "application/vnd.github.v3+json" },
-  });
-
-  if (response.status === 404) {
+  try {
     const tagsResponse = await fetch(tagsApiUrl, {
       headers: { Accept: "application/vnd.github.v3+json" },
     });
 
     if (!tagsResponse.ok) {
-      return buildFallbackStatus(currentVersion);
+      throw new ApiError(
+        `Failed to fetch tags: ${tagsResponse.status} ${tagsResponse.statusText}`,
+        502,
+      );
     }
 
     const tags = await tagsResponse.json();
     if (!Array.isArray(tags) || tags.length === 0) {
-      return buildFallbackStatus(currentVersion);
+      return buildUpdateStatus(
+        currentVersion,
+        currentVersion,
+        `https://github.com/${repo}`,
+        "Current",
+      );
     }
 
     const topTag = typeof tags[0].name === "string" ? tags[0].name : "";
     const latestVersion = topTag.replace(/^v/i, "");
+
     if (!latestVersion) {
-      return buildFallbackStatus(currentVersion);
+      return buildUpdateStatus(
+        currentVersion,
+        currentVersion,
+        `https://github.com/${repo}`,
+        "Current",
+      );
     }
 
     return buildUpdateStatus(
@@ -125,43 +126,69 @@ export const getLatestRelease = async (): Promise<UpdateStatus> => {
       `https://github.com/${repo}/releases/tag/${topTag}`,
       topTag,
     );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError("Failed to fetch latest version from GitHub", 502);
   }
-
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to fetch latest release: ${response.status} ${response.statusText}`,
-      502,
-    );
-  }
-
-  const json = await response.json();
-  const latestVersion = typeof json.tag_name === "string" ? json.tag_name.replace(/^v/i, "") : "";
-  const releaseUrl = typeof json.html_url === "string" ? json.html_url : `https://github.com/${repo}`;
-  const releaseName = typeof json.name === "string" && json.name ? json.name : latestVersion;
-
-  if (!latestVersion) {
-    return buildFallbackStatus(currentVersion);
-  }
-
-  return buildUpdateStatus(currentVersion, latestVersion, releaseUrl, releaseName);
 };
 
 export const updateDockManage = async (): Promise<UpdateResult> => {
   const releaseInfo = await getLatestRelease();
-  const npmCmd = getNpmCommand();
   let output = "";
 
-  const fetchResult = await runCommand("git", ["fetch", "--tags", "origin"]);
-  output += `git fetch output:\n${fetchResult.stdout}\n${fetchResult.stderr}\n`;
+  if (!releaseInfo.updateAvailable) {
+    output = "Already on the latest version.";
+    return {
+      ...releaseInfo,
+      output,
+    };
+  }
 
-  const pullResult = await runCommand("git", ["pull", "--ff-only", "origin", "HEAD"]);
-  output += `git pull output:\n${pullResult.stdout}\n${pullResult.stderr}\n`;
+  try {
+    const newImageTag = `anoopraosringeri/dockmanage:${releaseInfo.latestVersion}`;
+    output += `Pulling new image: ${newImageTag}\n`;
 
-  const installResult = await runCommand(npmCmd, ["install"]);
-  output += `npm install output:\n${installResult.stdout}\n${installResult.stderr}\n`;
+    const { stdout: pullOutput, stderr: pullError } = await execFileAsync("docker", [
+      "pull",
+      newImageTag,
+    ]);
 
-  return {
-    ...releaseInfo,
-    output,
-  };
+    output += `Pull output:\n${pullOutput}\n`;
+    if (pullError) {
+      output += `Pull stderr:\n${pullError}\n`;
+    }
+
+    // Restart the dockmanage container using docker-compose if available
+    const configDir = process.env.DOCKMANAGE_CONFIG_DIR || "/app/docker";
+    output += `\nRestarting dockmanage container...\n`;
+
+    try {
+      const { stdout: upOutput, stderr: upError } = await execFileAsync("docker", [
+        "compose",
+        "-f",
+        `${configDir}/docker-compose.yml`,
+        "up",
+        "-d",
+        "dockmanage",
+      ]);
+
+      output += `Restart output:\n${upOutput}\n`;
+      if (upError) {
+        output += `Restart stderr:\n${upError}\n`;
+      }
+      output += `\nUpdate completed successfully!\n`;
+    } catch {
+      output += `Note: Could not auto-restart container via docker-compose. Please manually restart the dockmanage service.\n`;
+    }
+
+    return {
+      ...releaseInfo,
+      output,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ApiError(`Failed to update DockManage: ${errorMessage}`, 500);
+  }
 };

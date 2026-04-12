@@ -46,6 +46,7 @@ ENV PORT=4000
 # Copy node_modules and package definitions
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/api/package.json ./apps/api/package.json
+COPY --from=prod-deps /app/apps/web/package.json ./apps/web/package.json
 COPY --from=prod-deps /app/packages/types/package.json ./packages/types/package.json
 
 # Copy compiled build artifacts

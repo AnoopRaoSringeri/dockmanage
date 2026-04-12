@@ -313,7 +313,8 @@ export const restartService = async (filePath: string): Promise<void> => {
     await runDockerCompose(directory, ["-f", fileName, "rm", "-f", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "pull", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "build", ...services]);
-    await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
+    // Use --no-recreate to prevent conflicts with orchestrator or other running containers
+    await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-recreate", ...services]);
 
     console.log("Restart complete.");
   } catch (err: any) {
@@ -321,41 +322,38 @@ export const restartService = async (filePath: string): Promise<void> => {
 
     const conflictName =
       typeof err?.message === "string" ? extractConflictingContainerName(err.message) : null;
-    if (conflictName) {
-      // For dockmanage conflicts, try to remove the stale container if it's not running
-      if (conflictName.toLowerCase() === "dockmanage") {
-        console.log("Conflict with dockmanage container detected - attempting to remove stale instance.");
-        const removed = await removeStoppedContainerIfExists(conflictName);
-        if (removed) {
-          try {
-            const services = await getComposeServices(directory, fileName);
-            if (services.length > 0) {
-              await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
-            }
-            console.log("Retry succeeded after removing stale dockmanage container.");
-            return;
-          } catch (retryError: any) {
-            throw new ApiError(
-              `Failed to restart service after removing stale dockmanage container: ${retryError?.message ?? String(retryError)}`,
-              500,
-            );
-          }
-        } else {
-          // If we couldn't remove it (likely because it's running), warn and continue
-          console.warn("Dockmanage container is currently running and cannot be removed. This may cause restart conflicts.");
-          throw new ApiError(
-            "Failed to restart service: The dockmanage orchestrator container is in use. Please try again.",
-            500,
-          );
+    
+    if (conflictName?.toLowerCase() === "dockmanage") {
+      // If dockmanage conflicts, retry after brief delay as conflict may be transient
+      console.log("Conflict with dockmanage container detected - retrying after brief delay...");
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      try {
+        const services = await getComposeServices(directory, fileName);
+        if (services.length > 0) {
+          // Retry with --remove-orphans to clean up any orphaned containers
+          await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--remove-orphans", "--no-recreate", ...services]);
         }
+        console.log("Retry succeeded after conflict resolution.");
+        return;
+      } catch (retryError: any) {
+        console.error("Retry failed:", retryError?.message ?? retryError);
+        throw new ApiError(
+          `Failed to restart service: ${retryError?.message ?? String(retryError)}. The dockmanage orchestrator may be under heavy load - please try again.`,
+          500,
+        );
       }
+    }
 
+    if (conflictName) {
+      // For other container conflicts, try to remove the stale container
+      console.log(`Attempting to remove stale container: ${conflictName}`);
       const removed = await removeStoppedContainerIfExists(conflictName);
       if (removed) {
         try {
           const services = await getComposeServices(directory, fileName);
           if (services.length > 0) {
-            await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
+            await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-recreate", ...services]);
           }
           console.log(`Retry succeeded after removing stale container ${conflictName}.`);
           return;

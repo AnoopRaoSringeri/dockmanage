@@ -155,33 +155,16 @@ export const updateDockManage = async (): Promise<UpdateResult> => {
       newImageTag,
     ]);
 
-    output += `Pull output:\n${pullOutput}\n`;
+    output += `${pullOutput}`;
     if (pullError) {
-      output += `Pull stderr:\n${pullError}\n`;
+      output += `${pullError}`;
     }
 
-    // Restart the dockmanage container using docker-compose if available
-    const configDir = process.env.DOCKMANAGE_CONFIG_DIR || "/app/docker";
-    output += `\nRestarting dockmanage container...\n`;
-
-    try {
-      const { stdout: upOutput, stderr: upError } = await execFileAsync("docker", [
-        "compose",
-        "-f",
-        `${configDir}/docker-compose.yml`,
-        "up",
-        "-d",
-        "dockmanage",
-      ]);
-
-      output += `Restart output:\n${upOutput}\n`;
-      if (upError) {
-        output += `Restart stderr:\n${upError}\n`;
-      }
-      output += `\nUpdate completed successfully!\n`;
-    } catch {
-      output += `Note: Could not auto-restart container via docker-compose. Please manually restart the dockmanage service.\n`;
-    }
+    output += `\n✓ Image downloaded successfully!\n\n`;
+    output += `To apply the update, restart the dockmanage container:\n`;
+    output += `  docker-compose up -d dockmanage\n`;
+    output += `or\n`;
+    output += `  docker restart dockmanage\n`;
 
     return {
       ...releaseInfo,
@@ -189,6 +172,6 @@ export const updateDockManage = async (): Promise<UpdateResult> => {
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new ApiError(`Failed to update DockManage: ${errorMessage}`, 500);
+    throw new ApiError(`Failed to download DockManage image: ${errorMessage}`, 500);
   }
 };

@@ -321,6 +321,12 @@ export const restartService = async (filePath: string): Promise<void> => {
     const conflictName =
       typeof err?.message === "string" ? extractConflictingContainerName(err.message) : null;
     if (conflictName) {
+      // For dockmanage conflicts, just ignore since it's the orchestrator
+      if (conflictName.toLowerCase() === "dockmanage") {
+        console.log("Conflict with dockmanage container ignored - it's the orchestrator.");
+        return;
+      }
+
       const removed = await removeStoppedContainerIfExists(conflictName);
       if (removed) {
         try {

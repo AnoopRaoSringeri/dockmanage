@@ -24,6 +24,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
 
+      - name: Extract version without v prefix
+        id: version
+        run: echo "cleanVersion=$(echo ${{ steps.bump.outputs.new_tag }} | sed 's/^v//')" >> $GITHUB_OUTPUT
+
       - name: Extract Docker image metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -31,6 +35,7 @@ jobs:
           images: ${{ vars.DOCKER_USERNAME }}/dockmanage
           tags: |
             type=raw,value=${{ steps.bump.outputs.new_tag }}
+            type=raw,value=${{ steps.version.outputs.cleanVersion }}
             type=raw,value=latest
 
       - name: Log in to Docker Hub
@@ -56,11 +61,11 @@ jobs:
           tag_name: ${{ steps.bump.outputs.new_tag }}
           body: |
             ## Docker Image
-            Docker Hub: `${{ vars.DOCKER_USERNAME }}/dockmanage:${{ steps.bump.outputs.new_tag }}`
+            Docker Hub: `${{ vars.DOCKER_USERNAME }}/dockmanage:${{ steps.version.outputs.cleanVersion }}`
             
             To update DockManage to this version:
             ```bash
-            docker pull ${{ vars.DOCKER_USERNAME }}/dockmanage:${{ steps.bump.outputs.new_tag }}
+            docker pull ${{ vars.DOCKER_USERNAME }}/dockmanage:${{ steps.version.outputs.cleanVersion }}
             docker-compose up -d dockmanage
             ```
           prerelease: ${{ steps.bump.outputs.is_new_tag == 'false' }}

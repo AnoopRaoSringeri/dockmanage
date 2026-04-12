@@ -310,6 +310,7 @@ export const restartService = async (filePath: string): Promise<void> => {
 
     console.log(`Restarting following services: ${services.map((s) => s).join(", ")}`)
     await runDockerCompose(directory, ["-f", fileName, "stop", ...services]);
+    await runDockerCompose(directory, ["-f", fileName, "rm", "-f", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "pull", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "build", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
@@ -321,10 +322,32 @@ export const restartService = async (filePath: string): Promise<void> => {
     const conflictName =
       typeof err?.message === "string" ? extractConflictingContainerName(err.message) : null;
     if (conflictName) {
-      // For dockmanage conflicts, just ignore since it's the orchestrator
+      // For dockmanage conflicts, try to remove the stale container if it's not running
       if (conflictName.toLowerCase() === "dockmanage") {
-        console.log("Conflict with dockmanage container ignored - it's the orchestrator.");
-        return;
+        console.log("Conflict with dockmanage container detected - attempting to remove stale instance.");
+        const removed = await removeStoppedContainerIfExists(conflictName);
+        if (removed) {
+          try {
+            const services = await getComposeServices(directory, fileName);
+            if (services.length > 0) {
+              await runDockerCompose(directory, ["-f", fileName, "up", "-d", ...services]);
+            }
+            console.log("Retry succeeded after removing stale dockmanage container.");
+            return;
+          } catch (retryError: any) {
+            throw new ApiError(
+              `Failed to restart service after removing stale dockmanage container: ${retryError?.message ?? String(retryError)}`,
+              500,
+            );
+          }
+        } else {
+          // If we couldn't remove it (likely because it's running), warn and continue
+          console.warn("Dockmanage container is currently running and cannot be removed. This may cause restart conflicts.");
+          throw new ApiError(
+            "Failed to restart service: The dockmanage orchestrator container is in use. Please try again.",
+            500,
+          );
+        }
       }
 
       const removed = await removeStoppedContainerIfExists(conflictName);

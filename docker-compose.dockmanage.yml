@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  dockmanage:
+    image: ${DOCKMANAGE_IMAGE:-anoopraosringeri/dockmanage:latest}
+    container_name: dockmanage
+    restart: unless-stopped
+    user: root
+    ports:
+      - "${DOCKMANAGE_PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DOCKMANAGE_CONFIG_DIR: /app/docker
+    volumes:
+      - /home/ubuntu/sketch-now:/app/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - node-network
+
+networks:
+  node-network:
+    driver: bridge

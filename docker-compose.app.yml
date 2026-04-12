@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  node:
+    image: anoopraosringeri/sketch-now-server    # built in CI/CD
+    networks:
+      - node-network
+    environment:
+      - NODE_ENV=docker
+      - PORT=5000
+      - REDIS_HOST=redis-14137.c14.us-east-1-2.ec2.cloud.redislabs.com
+      - REDIS_PASSWORD=pPfmxLTDd5GShl73fAnyR2YUELxzduRy
+      - REDIS_PORT=14137
+      - MONGO_PASSWORD=nJgA9JN9e2iF3tn2
+      - DATABASE=Phoenix
+      - SECRET_JWT_CODE=sketchnow
+      - EMAIL=sketchnow2024@gmail.com
+      - EMAIL_PASSWORD=xrst afmp myga yolq
+    volumes:
+      -  ./docker/now/app-data:/app-data
+
+  nginx:
+    build:
+      context: ./nginx
+      args:
+        VITE_SKETCH_NOW_URL: "/api/"   # Pass build-time environment variable
+        VITE_OLLAMA_URL: "/ollama"
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - node
+    networks:
+      - node-network
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+
+networks:
+  node-network:
+    driver: bridge

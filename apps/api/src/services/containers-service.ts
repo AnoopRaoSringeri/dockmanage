@@ -313,8 +313,8 @@ export const restartService = async (filePath: string): Promise<void> => {
     await runDockerCompose(directory, ["-f", fileName, "rm", "-f", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "pull", ...services]);
     await runDockerCompose(directory, ["-f", fileName, "build", ...services]);
-    // Use --no-recreate to prevent conflicts with orchestrator or other running containers
-    await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-recreate", ...services]);
+    // Use --no-deps to avoid starting service dependencies such as the dockmanage orchestrator
+    await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-deps", "--no-recreate", ...services]);
 
     console.log("Restart complete.");
   } catch (err: any) {
@@ -332,7 +332,7 @@ export const restartService = async (filePath: string): Promise<void> => {
         const services = await getComposeServices(directory, fileName);
         if (services.length > 0) {
           // Retry with --remove-orphans to clean up any orphaned containers
-          await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--remove-orphans", "--no-recreate", ...services]);
+          await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--remove-orphans", "--no-deps", "--no-recreate", ...services]);
         }
         console.log("Retry succeeded after conflict resolution.");
         return;
@@ -353,7 +353,7 @@ export const restartService = async (filePath: string): Promise<void> => {
         try {
           const services = await getComposeServices(directory, fileName);
           if (services.length > 0) {
-            await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-recreate", ...services]);
+            await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-deps", "--no-recreate", ...services]);
           }
           console.log(`Retry succeeded after removing stale container ${conflictName}.`);
           return;

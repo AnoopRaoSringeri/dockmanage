@@ -1,18 +1,12 @@
 version: "3.9"
 
-services:
-  dockmanage:
-    image: ${DOCKMANAGE_IMAGE:-anoopraosringeri/dockmanage:latest}
-    restart: unless-stopped
-    ports:
-      - "${DOCKMANAGE_PORT:-4000}:4000"
-    environment:
-      NODE_ENV: production
-      PORT: 4000
-      DOCKMANAGE_CONFIG_DIR: /app/docker
-    volumes:
-      - dockmanage-config:/app/docker
-      - /var/run/docker.sock:/var/run/docker.sock
+# Main compose file that includes all services
+# Split into separate files for better organization:
+# - docker-compose.app.yml: node and nginx services
+# - docker-compose.dockmanage.yml: dockmanage orchestrator
+# - docker-compose.certbot.yml: certbot service
 
-volumes:
-  dockmanage-config:
+include:
+  - docker-compose.app.yml
+  - docker-compose.dockmanage.yml
+  - docker-compose.certbot.yml

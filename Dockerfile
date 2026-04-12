@@ -20,6 +20,7 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY apps/api/package*.json apps/api/
+COPY apps/web/package*.json apps/web/
 COPY packages/types/package*.json packages/types/
 RUN npm ci --omit=dev --workspace=@dockmanage/api --workspace=@dockmanage/types && npm cache clean --force
 

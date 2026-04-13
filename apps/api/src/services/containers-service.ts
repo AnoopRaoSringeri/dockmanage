@@ -323,19 +323,13 @@ export const restartService = async (filePath: string): Promise<void> => {
       "--remove-orphans"
     ]);
 
-    // 3️⃣ Build images (for local Dockerfiles)
-    await runDockerCompose(directory, [
-      "-f", fileName,
-      "build"
-    ]);
-
-    // 4️⃣ Start fresh containers
-    await runDockerCompose(directory, [
-      "-f", fileName,
-      "up",
-      "-d",
-      "--remove-orphans"
-    ]);
+    // Start fresh
+   await runDockerCompose(directory, [
+    "-f", fileName,
+    "up",
+    "-d",
+    "--build"
+  ]);
 
     console.log("Restart complete (pull + build + recreate).");
 

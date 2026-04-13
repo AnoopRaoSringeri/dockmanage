@@ -295,12 +295,12 @@ const getComposeServices = async (cwd: string, fileName: string): Promise<string
 
 export const restartService = async (filePath: string): Promise<void> => {
   const absolutePath = toAbsolutePath(filePath);
-  console.log(`Running compose command in ${absolutePath}`);
   const directory = path.dirname(absolutePath);
   const fileName = path.basename(absolutePath);
 
+  console.log(`Restarting services using: ${absolutePath}`);
+
   try {
-    console.log(`Restarting services using: ${absolutePath}`);
     const services = await getComposeServices(directory, fileName);
 
     if (services.length === 0) {
@@ -308,64 +308,43 @@ export const restartService = async (filePath: string): Promise<void> => {
       return;
     }
 
-    console.log(`Restarting following services: ${services.map((s) => s).join(", ")}`)
+    console.log(`Services: ${services.join(", ")}`);
+
+    // 1️⃣ Pull latest images
+    await runDockerCompose(directory, [
+      "-f", fileName,
+      "pull"
+    ]);
+
+    // 2️⃣ Stop & remove existing containers (prevents ALL conflicts)
+    await runDockerCompose(directory, [
+      "-f", fileName,
+      "down",
+      "--remove-orphans"
+    ]);
+
+    // 3️⃣ Build images (for local Dockerfiles)
+    await runDockerCompose(directory, [
+      "-f", fileName,
+      "build"
+    ]);
+
+    // 4️⃣ Start fresh containers
     await runDockerCompose(directory, [
       "-f", fileName,
       "up",
       "-d",
-      "--build",
       "--remove-orphans"
     ]);
-    console.log("Restart complete.");
+
+    console.log("Restart complete (pull + build + recreate).");
+
   } catch (err: any) {
     console.error("Failed to restart service:", err?.message ?? err);
 
-    const conflictName =
-      typeof err?.message === "string" ? extractConflictingContainerName(err.message) : null;
-    
-    if (conflictName?.toLowerCase() === "dockmanage") {
-      // If dockmanage conflicts, retry after brief delay as conflict may be transient
-      console.log("Conflict with dockmanage container detected - retrying after brief delay...");
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      try {
-        const services = await getComposeServices(directory, fileName);
-        if (services.length > 0) {
-          // Retry with --remove-orphans to clean up any orphaned containers
-          await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--remove-orphans", "--no-deps", "--no-recreate", ...services]);
-        }
-        console.log("Retry succeeded after conflict resolution.");
-        return;
-      } catch (retryError: any) {
-        console.error("Retry failed:", retryError?.message ?? retryError);
-        throw new ApiError(
-          `Failed to restart service: ${retryError?.message ?? String(retryError)}. The dockmanage orchestrator may be under heavy load - please try again.`,
-          500,
-        );
-      }
-    }
-
-    if (conflictName) {
-      // For other container conflicts, try to remove the stale container
-      console.log(`Attempting to remove stale container: ${conflictName}`);
-      const removed = await removeStoppedContainerIfExists(conflictName);
-      if (removed) {
-        try {
-          const services = await getComposeServices(directory, fileName);
-          if (services.length > 0) {
-            await runDockerCompose(directory, ["-f", fileName, "up", "-d", "--no-deps", "--no-recreate", ...services]);
-          }
-          console.log(`Retry succeeded after removing stale container ${conflictName}.`);
-          return;
-        } catch (retryError: any) {
-          throw new ApiError(
-            `Failed to restart service after removing stale container '${conflictName}': ${retryError?.message ?? String(retryError)}`,
-            500,
-          );
-        }
-      }
-    }
-
-    throw new ApiError(`Failed to restart service: ${err?.message ?? String(err)}`, 500);
+    throw new ApiError(
+      `Failed to restart service: ${err?.message ?? String(err)}`,
+      500
+    );
   }
 };
